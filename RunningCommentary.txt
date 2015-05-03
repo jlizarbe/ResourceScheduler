@@ -1,0 +1,42 @@
+First of all we must create the test unit for our ResourceScheduler.
+Then we check the constructor with the correct number of resources, create our ResourceScheduler class and fill it with a field for the number of available resources.
+
+After we have checked the constructor with the limit cases, we proceed with the forwarding behaviour.
+In order to check the behaviour of out class with different Messages and the Gateway I will create a Gateway stub class which will save the messages sent in their order. 
+The gateway will be created by a GatewayFactory for this tests but in a real product I would use some kind of injection (e.g. Spring or Guice).
+The first forwarding test will be an attempt to send a null message.
+The next forwarding test is about the sending of 1 message with 1 resource available. This test thus requires me to add a simple Message implementation. Now, with the Gateway stub implementation we can check if the message was sent.
+The third test, 2 message with 2 resources, does not provide further information at this point.
+
+Now we will start checking the queuing behaviour. For this behaviour it is enough, at this point, to test 2 messages and 1 resource. Again, with the Gateway Stub implementation we can check how many messages have been sent.
+
+The next behaviour consists in responding. This behaviour shows that we need to implement some kind of algorithm that lets us recover a message previously 'discarded' due to busy resources. Also we need something that alerts
+our resource scheduler when a message have been completed and a resource is now idle. 
+In order to avoid an active waiting resource scheduler, we can use the Observer software pattern. In this case, the resource scheduler will be the Observer and our Message the Observable classes. 
+To resolve it, we can create an abstract class which implements the Message interface with a protected field of possible observers (in this case the ResourceScheduler class). 
+Also our abstract class (JPMorganMessage class) has a method to register new observers and also implements the interface's method "completed" calling all the registered observers.
+
+The last 'basic' behaviour is prioritising. At this point we need to add concurrent code. First, we must synchronize the field that discerns how many resources are available. 
+Also we need to add an abstract method to our abstract message class which forces us to retrieve the message's groupId. 
+We must also separate the message queue in several different queues (one per groupId) and separate every queue according to whether the groupId is opened or not. 
+Finally, as every access to these structures could lead to concurrency problems, it is better to synchronize all the prioritising code.
+
+Extra credit:
+
+Cancellation: for this behaviour we must implement two tests. The first test must assert that if the resource scheduler has queued some group's messages and this group is cancelled, 
+the resource scheduler cannot send the queued messages to the gateway. 
+
+The second test will ensure that whenever a resource scheduler group has been cancelled, this specific group's new messages will not be sent to the gateway. 
+After we add the first test, we need to implement a new method in the resource scheduler: cancelGroup(String groupId). This method will look into the added queues and eliminate the requested group's messages. 
+The second test proves that it is also necessary to add a system that controls the new messages. To resolve this situation we can use a Set that saves the previously cancelled groups.
+
+Alternative Message Prioritisation: this change demands a refactor of the prioritising algorithm. The best approach to this is to create a Prioritisation Strategy interface that encapsulates the queuing, 
+recovering and cancellation behaviours, and then demands a strategy in the ResourceScheduler constructor.
+
+Termination: our JPMorgan abstract class must have a new method that indicates if this is the last message. 
+We also need a new runtime exception (GroupTerminatedException) to throw when the resource scheduler has received a terminated group's message. Finally, 
+the resource scheduler must delegate this feature to the prioritizing strategy implementation. 
+After queueing a message, the strategy class must check if the message it is the last message. In this case, the strategy will save the groupId in a Set, such as in cancellation case. 
+Thus, during future queuing messages calls, the strategy will look up whether the messages' groupId are terminated and throw the exception in such cases.
+
+
